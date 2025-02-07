@@ -39,6 +39,7 @@ ROOT = Path(os.path.relpath(ROOT, Path.cwd()))  # relative
 from classify import val as validate
 from models.experimental import attempt_load
 from models.yolo import ClassificationModel, DetectionModel
+from models.common import Classify,MutiTaskClassify
 from utils.dataloaders import create_classification_dataloader
 from utils.general import (
     DATASETS_DIR,
@@ -156,6 +157,8 @@ def train(opt, device):
             m.reset_parameters()
         if isinstance(m, torch.nn.Dropout) and opt.dropout is not None:
             m.p = opt.dropout  # set dropout
+    name, m1 = list((model.model).named_children())[-1]
+    model.model.add_module(name, MutiTaskClassify(100, 100, 100))
     for p in model.parameters():
         p.requires_grad = True  # for training
     model = model.to(device)
@@ -220,8 +223,11 @@ def train(opt, device):
 
             # Forward
             with amp.autocast(enabled=cuda):  # stability issues when enabled
-                loss = criterion(model(images), labels)
-
+                # loss = criterion(model(images), labels)
+                loss1 = criterion(model(images)[0], labels)
+                loss2 = criterion(model(images)[1], labels)
+                loss3 = criterion(model(images)[2], labels)
+                loss = loss1 + loss2 + loss3
             # Backward
             scaler.scale(loss).backward()
 
@@ -342,10 +348,10 @@ def parse_opt(known=False):
 
 def main(opt):
     """Executes YOLOv5 training with given options, handling device setup and DDP mode; includes pre-training checks."""
-    if RANK in {-1, 0}:
-        print_args(vars(opt))
-        check_git_status()
-        check_requirements(ROOT / "requirements.txt")
+    # if RANK in {-1, 0}:
+    #     print_args(vars(opt))
+    #     check_git_status()
+    #     check_requirements(ROOT / "requirements.txt")
 
     # DDP mode
     device = select_device(opt.device, batch_size=opt.batch_size)

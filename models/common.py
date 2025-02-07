@@ -1107,3 +1107,31 @@ class Classify(nn.Module):
         if isinstance(x, list):
             x = torch.cat(x, 1)
         return self.linear(self.drop(self.pool(self.conv(x)).flatten(1)))
+
+class MutiTaskClassify(nn.Module):
+    """YOLOv5 classification head with convolution, pooling, and dropout layers for channel transformation."""
+    
+    def __init__(
+        self,num_classes_task1, num_classes_task2, num_classes_task3, k=1, s=1, p=None, g=1, dropout_p=0.0
+    ):  # ch_in, ch_out, kernel, stride, padding, groups, dropout probability
+        """Initializes YOLOv5 classification head with convolution, pooling, and dropout layers for input to output
+        channel transformation.
+        """
+        super().__init__()
+        c_ = 1280  # efficientnet_b0 size
+        self.f = -1 
+        self.i = 9
+        self.conv = Conv(256, c_, k, s, autopad(k, p), g)
+        self.pool = nn.AdaptiveAvgPool2d(1)  # to x(b,c_,1,1)
+        self.drop = nn.Dropout(p=dropout_p, inplace=True)
+        self.linear = nn.Linear(c_, num_classes_task1)  # to x(b,c2)
+        self.linear2 = nn.Linear(c_, num_classes_task2)  # to x(b,c2)
+        self.linear3 = nn.Linear(c_, num_classes_task3)  # to x(b,c2)
+
+    def forward(self, x):
+        """Processes input through conv, pool, drop, and linear layers; supports list concatenation input."""
+        if isinstance(x, list):
+            x = torch.cat(x, 1)
+        return self.linear(self.drop(self.pool(self.conv(x)).flatten(1))), self.linear2(self.drop(self.pool(self.conv(x)).flatten(1))), self.linear3(self.drop(self.pool(self.conv(x)).flatten(1)))
+    
+    
