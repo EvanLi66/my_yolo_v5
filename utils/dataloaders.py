@@ -1336,6 +1336,7 @@ class ClassificationDataset(torchvision.datasets.ImageFolder):
         self.album_transforms = classify_albumentations(augment, imgsz) if augment else None
         self.cache_ram = cache is True or cache == "ram"
         self.cache_disk = cache == "disk"
+        self.samples = self.set_multi_class()  # filter out bad targets
         self.samples = [list(x) + [Path(x[0]).with_suffix(".npy"), None] for x in self.samples]  # file, index, npy, im
 
     def __getitem__(self, i):
@@ -1355,7 +1356,47 @@ class ClassificationDataset(torchvision.datasets.ImageFolder):
             sample = self.torch_transforms(im)
         return sample, j
 
+    def parse_labels(self, path_parts):
+            """
+            根据路径中的目录名称解析标签，支持多级标签配置。
+            
+            Args:
+                path_parts (list): 图像路径的各部分，按照目录结构组织。
+                
+            Returns:
+                list: 返回一个多任务标签的列表。
+            """
+            labels = []
+            for task, task_labels in self.label_config.items():
+                # 默认标签值
+                label = -1  # -1 表示未匹配
 
+                # 根据目录层次匹配标签
+                for label_name, label_value in task_labels.items():
+                    if label_name in path_parts:
+                        label = label_value
+                        break
+
+                labels.append(label)
+            return labels
+        
+    def set_multi_class(self):
+        multi_task_samples = []
+        self.label_config = {
+        "scene": {"Indoor": 0, "Outdoor": 1},  # 场景：indoor 为 0，outdoor 为 1
+        "light_condition": {"Dark": 0, "Light": 1},  # 光照条件：Dark 为 0，Light 为 1
+        "main_task": {"clean": 0, "slight_occlusion": 1, "moderate_occlusion": 2, "severe_occlusion": 3, "full_occlusion": 4} # 脏污否："clean": 0, "slight_occlusion": 1, "moderate_occlusion": 2, "severe_occlusion": 3, "full_occlusion": 4
+        }
+        for img_path, label in self.samples:
+            path_parts = Path(img_path).parts
+
+            # 根据路径解析多任务标签
+            multi_task_labels = self.parse_labels(path_parts)
+
+            # 添加图像和对应的标签
+            multi_task_samples.append((img_path, multi_task_labels))
+
+        return multi_task_samples
 def create_classification_dataloader(
     path, imgsz=224, batch_size=16, augment=True, cache=False, rank=-1, workers=8, shuffle=True
 ):

@@ -12,7 +12,7 @@ Datasets:           --data mnist, fashion-mnist, cifar10, cifar100, imagenette, 
 YOLOv5-cls models:  --model yolov5n-cls.pt, yolov5s-cls.pt, yolov5m-cls.pt, yolov5l-cls.pt, yolov5x-cls.pt
 Torchvision models: --model resnet50, efficientnet_b0, etc. See https://pytorch.org/vision/stable/models.html
 """
-
+import matplotlib.pyplot as plt
 import argparse
 import os
 import subprocess
@@ -104,16 +104,16 @@ def train(opt, device):
     # Download Dataset
     with torch_distributed_zero_first(LOCAL_RANK), WorkingDirectory(ROOT):
         data_dir = data if data.is_dir() else (DATASETS_DIR / data)
-        if not data_dir.is_dir():
-            LOGGER.info(f"\nDataset not found ⚠️, missing path {data_dir}, attempting download...")
-            t = time.time()
-            if str(data) == "imagenet":
-                subprocess.run(["bash", str(ROOT / "data/scripts/get_imagenet.sh")], shell=True, check=True)
-            else:
-                url = f"https://github.com/ultralytics/assets/releases/download/v0.0.0/{data}.zip"
-                download(url, dir=data_dir.parent)
-            s = f"Dataset download success ✅ ({time.time() - t:.1f}s), saved to {colorstr('bold', data_dir)}\n"
-            LOGGER.info(s)
+        # if not data_dir.is_dir():
+        #     LOGGER.info(f"\nDataset not found ⚠️, missing path {data_dir}, attempting download...")
+        #     t = time.time()
+        #     if str(data) == "imagenet":
+        #         subprocess.run(["bash", str(ROOT / "data/scripts/get_imagenet.sh")], shell=True, check=True)
+        #     else:
+        #         url = f"https://github.com/ultralytics/assets/releases/download/v0.0.0/{data}.zip"
+        #         download(url, dir=data_dir.parent)
+        #     s = f"Dataset download success ✅ ({time.time() - t:.1f}s), saved to {colorstr('bold', data_dir)}\n"
+        #     LOGGER.info(s)
 
     # Dataloaders
     nc = len([x for x in (data_dir / "train").glob("*") if x.is_dir()])  # number of classes
@@ -158,7 +158,7 @@ def train(opt, device):
         if isinstance(m, torch.nn.Dropout) and opt.dropout is not None:
             m.p = opt.dropout  # set dropout
     name, m1 = list((model.model).named_children())[-1]
-    model.model.add_module(name, MutiTaskClassify(100, 100, 100))
+    model.model.add_module(name, MutiTaskClassify(2, 2, 5))
     for p in model.parameters():
         p.requires_grad = True  # for training
     model = model.to(device)
@@ -219,14 +219,15 @@ def train(opt, device):
         if RANK in {-1, 0}:
             pbar = tqdm(enumerate(trainloader), total=len(trainloader), bar_format=TQDM_BAR_FORMAT)
         for i, (images, labels) in pbar:  # progress bar
+            labels = torch.tensor(labels).unsqueeze(0).to(device)
             images, labels = images.to(device, non_blocking=True), labels.to(device)
 
             # Forward
             with amp.autocast(enabled=cuda):  # stability issues when enabled
                 # loss = criterion(model(images), labels)
-                loss1 = criterion(model(images)[0], labels)
-                loss2 = criterion(model(images)[1], labels)
-                loss3 = criterion(model(images)[2], labels)
+                loss1 = criterion(model(images)[0], labels[0][:1])
+                loss2 = criterion(model(images)[1], labels[0][1:2])
+                loss3 = criterion(model(images)[2], labels[0][2:3])
                 loss = loss1 + loss2 + loss3
             # Backward
             scaler.scale(loss).backward()
