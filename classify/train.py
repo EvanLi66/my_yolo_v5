@@ -173,6 +173,7 @@ def train(opt, device):
             LOGGER.info(model)
         images, labels = next(iter(trainloader))
         # file = imshow_cls(images[:25], labels[:25], names=model.names, f=save_dir / "train_images.jpg")
+        # # file = mutiHead_imshow_cls(images[:25], labels[:25], names=model.names, f=save_dir / "train_images.jpg")
         # logger.log_images(file, name="Train Examples")
         # logger.log_graph(model, imgsz)  # log model
 
@@ -209,10 +210,11 @@ def train(opt, device):
         f'Using {nw * WORLD_SIZE} dataloader workers\n'
         f"Logging results to {colorstr('bold', save_dir)}\n"
         f'Starting {opt.model} training on {data} dataset with {nc} classes for {epochs} epochs...\n\n'
-        f"{'Epoch':>10}{'GPU_mem':>10}{'train_loss':>12}{f'{val}_loss':>12}{'top1_acc':>12}{'top5_acc':>12}"
+        f"{'Epoch':>10}{'GPU_mem':>10}{'train_loss':>12}{'lossTask1':>12}{'lossTask2':>12}{'lossTask3':>12}{f'{val}_loss':>12}{'top1_acc':>12}{'top5_acc':>12}"
     )
     for epoch in range(epochs):  # loop over the dataset multiple times
         tloss, vloss, fitness = 0.0, 0.0, 0.0  # train loss, val loss, fitness
+        tloss_Task1,tloss_Task2,tloss_Task3 = 0.0,0.0,0.0
         model.train()
         if RANK != -1:
             trainloader.sampler.set_epoch(epoch)
@@ -244,8 +246,11 @@ def train(opt, device):
             if RANK in {-1, 0}:
                 # Print
                 tloss = (tloss * i + loss.item()) / (i + 1)  # update mean losses
+                tloss_Task1 = (tloss_Task1 * i + loss1.item()) / (i + 1)  # update mean losses
+                tloss_Task2 = (tloss_Task2 * i + loss2.item()) / (i + 1)  # update mean losses
+                tloss_Task3 = (tloss_Task3 * i + loss3.item()) / (i + 1)  # update mean losses
                 mem = "%.3gG" % (torch.cuda.memory_reserved() / 1e9 if torch.cuda.is_available() else 0)  # (GB)
-                pbar.desc = f"{f'{epoch + 1}/{epochs}':>10}{mem:>10}{tloss:>12.3g}" + " " * 36
+                pbar.desc = f"{f'{epoch + 1}/{epochs}':>10}{mem:>10}{tloss:>12.3g}{tloss_Task1:>12.3g}{tloss_Task2:>12.3g}{tloss_Task3:>12.3g}" + " " * 36
 
                 # Test
                 if i == len(pbar) - 1:  # last batch

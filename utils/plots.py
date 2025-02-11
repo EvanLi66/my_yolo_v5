@@ -416,6 +416,49 @@ def get_label_names(label, name_dict):
     result.append(list(name_dict['light_condition'].keys())[list(name_dict['light_condition'].values()).index(label[1])])  # 取 label[1] 对应 light_condition
     result.append(list(name_dict['main_task'].keys())[list(name_dict['main_task'].values()).index(label[2])])  # 取 label[2] 对应 main_task
     return result
+
+def mutiHead_imshow_cls_train(im, labels=None, pred=None, names=None, nmax=25, verbose=False, f=Path("images.jpg")):
+    """Displays a grid of images with optional labels and predictions, saving to a file."""
+    from utils.augmentations import denormalize
+
+    names = names or [f"class{i}" for i in range(1000)]
+    blocks = torch.chunk(
+        denormalize(im.clone()).cpu().float(), len(im), dim=0
+    )  # select batch index 0, block by channels
+    n = min(len(blocks), nmax)  # number of plots
+    m = min(8, round(n**0.5))  # 8 x 8 default
+    fig, ax = plt.subplots(math.ceil(n / m), m)  # 8 rows x n/8 cols
+    ax = ax.ravel() if m > 1 else [ax]
+    # plt.subplots_adjust(wspace=0.05, hspace=0.05)
+    labels = torch.stack(labels)
+    pred = torch.stack(pred)
+    for i in range(n):
+        ax[i].imshow(blocks[i].squeeze().permute((1, 2, 0)).numpy().clip(0.0, 1.0))
+        ax[i].axis("off")
+        l = labels[:, i]
+        p = pred[:, i]
+        # label_i = get_label_names(l, names)
+        # pred_i = get_label_names(p, names)
+        label_i = get_label_names_2(l, names)
+        pred_i = get_label_names_2(p, names)
+        # if labels is not None:
+        #     s = names[labels[i]] + (f"—{names[pred[i]]}" if pred is not None else "")
+        #     ax[i].set_title(s, fontsize=8, verticalalignment="top")
+        if labels is not None:
+            s = f"label:{label_i}\npred:{pred_i}"
+            ax[i].set_title(s, fontsize=3, verticalalignment="top")
+    plt.subplots_adjust(hspace=0.5, wspace=0.5)  # 调整子图间距
+    plt.tight_layout()  # 自动调整布局
+    plt.savefig(f, dpi=300, bbox_inches="tight")
+    plt.close()
+    if verbose:
+        LOGGER.info(f"Saving {f}")
+        if labels is not None:
+            LOGGER.info("True:     " + " ".join(f"{names[i]:3s}" for i in labels[:nmax]))
+        if pred is not None:
+            LOGGER.info("Predicted:" + " ".join(f"{names[i]:3s}" for i in pred[:nmax]))
+    return f
+
 def mutiHead_imshow_cls(im, labels=None, pred=None, names=None, nmax=25, verbose=False, f=Path("images.jpg")):
     """Displays a grid of images with optional labels and predictions, saving to a file."""
     from utils.augmentations import denormalize
