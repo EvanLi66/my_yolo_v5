@@ -103,7 +103,7 @@ def run(
         )
 
     model.eval()
-    pred, targets, loss, dt = [], [], 0, (Profile(device=device), Profile(device=device), Profile(device=device))
+    pred_1, targets_1, pred_2, targets_2,pred_3, targets_3,loss, dt = [], [], [], [],[], [],0, (Profile(device=device), Profile(device=device), Profile(device=device))
     n = len(dataloader)  # number of batches
     action = "validating" if dataloader.dataset.root.stem == "val" else "testing"
     desc = f"{pbar.desc[:-36]}{action:>36}" if pbar else f"{action}"
@@ -111,30 +111,81 @@ def run(
     with torch.cuda.amp.autocast(enabled=device.type != "cpu"):
         for images, labels in bar:
             with dt[0]:
+                labels = torch.stack(labels)
                 images, labels = images.to(device, non_blocking=True), labels.to(device)
 
             with dt[1]:
                 y = model(images)
 
             with dt[2]:
-                pred.append(y.argsort(1, descending=True)[:, :5])
-                targets.append(labels)
+                pred_1.append(y[0].argsort(1, descending=True)[:, :5])
+                targets_1.append(labels[:1][:].squeeze(0))
+                pred_2.append(y[1].argsort(1, descending=True)[:, :5])
+                targets_2.append(labels[1:2][:].squeeze(0))
+                pred_3.append(y[2].argsort(1, descending=True)[:, :5])
+                targets_3.append(labels[2:3][:].squeeze(0))
                 if criterion:
-                    loss += criterion(y, labels)
-
+                    loss1 = criterion(y[0], labels[:1][:].squeeze(0))
+                    loss2 = criterion(y[1], labels[1:2][:].squeeze(0))
+                    loss3 = criterion(y[2], labels[2:3][:].squeeze(0))
+                    loss_all = loss1 + loss2 + loss3
+                    loss += loss_all
     loss /= n
-    pred, targets = torch.cat(pred), torch.cat(targets)
-    correct = (targets[:, None] == pred).float()
-    acc = torch.stack((correct[:, 0], correct.max(1).values), dim=1)  # (top1, top5) accuracy
-    top1, top5 = acc.mean(0).tolist()
+    # Head_1
+    pred_1, targets_1 = torch.cat(pred_1), torch.cat(targets_1)
+    correct_1 = (targets_1[:, None] == pred_1).float()
+    acc_1 = torch.stack((correct_1[:, 0], correct_1.max(1).values), dim=1)  # (top1, top5) accuracy
+    top1_1, top5_1 = acc_1.mean(0).tolist()
 
     if pbar:
-        pbar.desc = f"{pbar.desc[:-36]}{loss:>12.3g}{top1:>12.3g}{top5:>12.3g}"
+        pbar.desc = f"{pbar.desc[:-36]}{loss:>12.3g}{top1_1:>12.3g}{top5_1:>12.3g}"
     if verbose:  # all classes
         LOGGER.info(f"{'Class':>24}{'Images':>12}{'top1_acc':>12}{'top5_acc':>12}")
-        LOGGER.info(f"{'all':>24}{targets.shape[0]:>12}{top1:>12.3g}{top5:>12.3g}")
+        LOGGER.info(f"{'all':>24}{targets_1.shape[0]:>12}{top1_1:>12.3g}{top5_1:>12.3g}")
         for i, c in model.names.items():
-            acc_i = acc[targets == i]
+            acc_i = acc_1[targets_1 == i]
+            top1i, top5i = acc_i.mean(0).tolist()
+            LOGGER.info(f"{c:>24}{acc_i.shape[0]:>12}{top1i:>12.3g}{top5i:>12.3g}")
+
+        # Print results
+        t = tuple(x.t / len(dataloader.dataset.samples) * 1e3 for x in dt)  # speeds per image
+        shape = (1, 3, imgsz, imgsz)
+        LOGGER.info(f"Speed: %.1fms pre-process, %.1fms inference, %.1fms post-process per image at shape {shape}" % t)
+        LOGGER.info(f"Results saved to {colorstr('bold', save_dir)}")
+    # Head_2
+    pred_2, targets_2 = torch.cat(pred_2), torch.cat(targets_2)
+    correct_2 = (targets_2[:, None] == pred_2).float()
+    acc_2 = torch.stack((correct_2[:, 0], correct_2.max(1).values), dim=1)  # (top1, top5) accuracy
+    top1_2, top5_2 = acc_2.mean(0).tolist()
+
+    if pbar:
+        pbar.desc = f"{pbar.desc[:-36]}{loss:>12.3g}{top1_2:>12.3g}{top5_2:>12.3g}"
+    if verbose:  # all classes
+        LOGGER.info(f"{'Class':>24}{'Images':>12}{'top1_acc':>12}{'top5_acc':>12}")
+        LOGGER.info(f"{'all':>24}{targets_2.shape[0]:>12}{top1_2:>12.3g}{top5_2:>12.3g}")
+        for i, c in model.names.items():
+            acc_i = acc_2[targets_2 == i]
+            top1i, top5i = acc_i.mean(0).tolist()
+            LOGGER.info(f"{c:>24}{acc_i.shape[0]:>12}{top1i:>12.3g}{top5i:>12.3g}")
+
+        # Print results
+        t = tuple(x.t / len(dataloader.dataset.samples) * 1e3 for x in dt)  # speeds per image
+        shape = (1, 3, imgsz, imgsz)
+        LOGGER.info(f"Speed: %.1fms pre-process, %.1fms inference, %.1fms post-process per image at shape {shape}" % t)
+        LOGGER.info(f"Results saved to {colorstr('bold', save_dir)}")
+    # Head_3
+    pred_3, targets_3 = torch.cat(pred_3), torch.cat(targets_3)
+    correct_3 = (targets_3[:, None] == pred_3).float()
+    acc_3 = torch.stack((correct_3[:, 0], correct_3.max(1).values), dim=1)  # (top1, top5) accuracy
+    top1_3, top5_3 = acc_3.mean(0).tolist()
+
+    if pbar:
+        pbar.desc = f"{pbar.desc[:-36]}{loss:>12.3g}{top1_3:>12.3g}{top5_3:>12.3g}"
+    if verbose:  # all classes
+        LOGGER.info(f"{'Class':>24}{'Images':>12}{'top1_acc':>12}{'top5_acc':>12}")
+        LOGGER.info(f"{'all':>24}{targets_3.shape[0]:>12}{top1_3:>12.3g}{top5_3:>12.3g}")
+        for i, c in model.names.items():
+            acc_i = acc_3[targets_3 == i]
             top1i, top5i = acc_i.mean(0).tolist()
             LOGGER.info(f"{c:>24}{acc_i.shape[0]:>12}{top1i:>12.3g}{top5i:>12.3g}")
 
@@ -144,7 +195,7 @@ def run(
         LOGGER.info(f"Speed: %.1fms pre-process, %.1fms inference, %.1fms post-process per image at shape {shape}" % t)
         LOGGER.info(f"Results saved to {colorstr('bold', save_dir)}")
 
-    return top1, top5, loss
+    return [top1_1,top1_2,top1_3], [top5_1,top5_2,top5_3], loss
 
 
 def parse_opt():

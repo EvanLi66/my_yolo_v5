@@ -57,7 +57,7 @@ from utils.general import (
     yaml_save,
 )
 from utils.loggers import GenericLogger
-from utils.plots import imshow_cls
+from utils.plots import imshow_cls ,mutiHead_imshow_cls
 from utils.torch_utils import (
     ModelEMA,
     de_parallel,
@@ -165,15 +165,16 @@ def train(opt, device):
 
     # Info
     if RANK in {-1, 0}:
-        model.names = trainloader.dataset.classes  # attach class names
+        # model.names = trainloader.dataset.classes  # attach class names
+        model.names = trainloader.dataset.label_config  # attach class names
         model.transforms = testloader.dataset.torch_transforms  # attach inference transforms
         model_info(model)
         if opt.verbose:
             LOGGER.info(model)
         images, labels = next(iter(trainloader))
-        file = imshow_cls(images[:25], labels[:25], names=model.names, f=save_dir / "train_images.jpg")
-        logger.log_images(file, name="Train Examples")
-        logger.log_graph(model, imgsz)  # log model
+        # file = imshow_cls(images[:25], labels[:25], names=model.names, f=save_dir / "train_images.jpg")
+        # logger.log_images(file, name="Train Examples")
+        # logger.log_graph(model, imgsz)  # log model
 
     # Optimizer
     optimizer = smart_optimizer(model, opt.optimizer, opt.lr0, momentum=0.9, decay=opt.decay)
@@ -200,7 +201,7 @@ def train(opt, device):
     # Train
     t0 = time.time()
     criterion = smartCrossEntropyLoss(label_smoothing=opt.label_smoothing)  # loss function
-    best_fitness = 0.0
+    best_fitness = [0.0,0.0,0.0]
     scaler = amp.GradScaler(enabled=cuda)
     val = test_dir.stem  # 'val' or 'test'
     LOGGER.info(
@@ -219,15 +220,14 @@ def train(opt, device):
         if RANK in {-1, 0}:
             pbar = tqdm(enumerate(trainloader), total=len(trainloader), bar_format=TQDM_BAR_FORMAT)
         for i, (images, labels) in pbar:  # progress bar
-            labels = torch.tensor(labels).unsqueeze(0).to(device)
+            labels = torch.stack(labels)
             images, labels = images.to(device, non_blocking=True), labels.to(device)
-
             # Forward
             with amp.autocast(enabled=cuda):  # stability issues when enabled
                 # loss = criterion(model(images), labels)
-                loss1 = criterion(model(images)[0], labels[0][:1])
-                loss2 = criterion(model(images)[1], labels[0][1:2])
-                loss3 = criterion(model(images)[2], labels[0][2:3])
+                loss1 = criterion(model(images)[0], labels[:1][:].squeeze(0))
+                loss2 = criterion(model(images)[1], labels[1:2][:].squeeze(0))
+                loss3 = criterion(model(images)[2], labels[1:2][:].squeeze(0))
                 loss = loss1 + loss2 + loss3
             # Backward
             scaler.scale(loss).backward()
@@ -267,8 +267,12 @@ def train(opt, device):
             metrics = {
                 "train/loss": tloss,
                 f"{val}/loss": vloss,
-                "metrics/accuracy_top1": top1,
-                "metrics/accuracy_top5": top5,
+                "acc_top1_Head1": top1[0],
+                "acc_top1_Head2": top1[1],
+                "acc_top1_Head3": top1[2],
+                "acc_top5_Head1": top5[0],
+                "acc_top5_Head2": top5[1],
+                "acc_top5_Head3": top5[2],
                 "lr/0": optimizer.param_groups[0]["lr"],
             }  # learning rate
             logger.log_metrics(metrics, epoch)
@@ -308,8 +312,12 @@ def train(opt, device):
 
         # Plot examples
         images, labels = (x[:25] for x in next(iter(testloader)))  # first 25 images and labels
-        pred = torch.max(ema.ema(images.to(device)), 1)[1]
-        file = imshow_cls(images, labels, pred, de_parallel(model).names, verbose=False, f=save_dir / "test_images.jpg")
+        pred_1 = torch.max(ema.ema(images.to(device))[0], 1)[1]
+        pred_2 = torch.max(ema.ema(images.to(device))[1], 1)[1]
+        pred_3 = torch.max(ema.ema(images.to(device))[2], 1)[1]
+        pred = [pred_1, pred_2, pred_3]
+        # file = imshow_cls(images, labels, pred, de_parallel(model).names, verbose=False, f=save_dir / "test_images.jpg")
+        file = mutiHead_imshow_cls(images, labels, pred, de_parallel(model).names, verbose=False, f=save_dir / "test_images.jpg")
 
         # Log results
         meta = {"epochs": epochs, "top1_acc": best_fitness, "date": datetime.now().isoformat()}

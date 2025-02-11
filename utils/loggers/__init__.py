@@ -400,6 +400,7 @@ class GenericLogger:
             n = len(metrics) + 1  # number of cols
             s = "" if self.csv.exists() else (("%23s," * n % tuple(["epoch"] + keys)).rstrip(",") + "\n")  # header
             with open(self.csv, "a") as f:
+                # f.write(s + ("%23.5g," * n % tuple([epoch] + vals)).rstrip(",") + "\n")
                 f.write(s + ("%23.5g," * n % tuple([epoch] + vals)).rstrip(",") + "\n")
 
         if self.tb:
