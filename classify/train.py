@@ -242,9 +242,6 @@ def train(opt, device):
                 else:
                     selected_cols_tensor = torch.empty((labels.shape[0], 0), device=device)  
                     selected_images_tensor = torch.empty((0, images.shape[1], images.shape[2], images.shape[3]), device=device) 
-                a = torch.empty((0, images.shape[1], images.shape[2], images.shape[3]), device=device) 
-                if a.numel() == 0:
-                    b = 10
                        
                 # loss2 = criterion(model(images)[1], labels[1:2][:].squeeze(0))
                 if selected_cols_tensor.numel() != 0:
