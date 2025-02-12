@@ -75,6 +75,30 @@ RANK = int(os.getenv("RANK", -1))
 WORLD_SIZE = int(os.getenv("WORLD_SIZE", 1))
 GIT_INFO = check_git_info()
 
+def compute_loss(images, labels, model, criterion, device):
+                    
+    selected_labels_cols = []
+    selected_images = []
+    for j in range(labels.shape[1]):
+        col = labels[:,j]
+        if col[0] != 0:
+            selected_labels_cols.append(col)
+            selected_images.append(images[j].unsqueeze(0))
+    if selected_labels_cols:
+        selected_labels_cols = [tensor.unsqueeze(1) for tensor in selected_labels_cols] 
+        selected_cols_tensor = torch.cat(selected_labels_cols, dim=1)  
+        selected_images_tensor = torch.cat(selected_images, dim=0)  
+    else:
+        selected_cols_tensor = torch.empty((labels.shape[0], 0), device=device)  
+        selected_images_tensor = torch.empty((0, images.shape[1], images.shape[2], images.shape[3]), device=device) 
+            
+    # loss2 = criterion(model(images)[1], labels[1:2][:].squeeze(0))
+    if selected_cols_tensor.numel() != 0:
+        loss = criterion(model(selected_images_tensor)[1], selected_cols_tensor[1:2][:].squeeze(0))
+    else:
+        loss = torch.tensor(0.0, device=device)
+    return loss
+    
 
 def train(opt, device):
     """Trains a YOLOv5 model, managing datasets, model optimization, logging, and saving checkpoints."""
@@ -228,26 +252,7 @@ def train(opt, device):
             with amp.autocast(enabled=cuda):  # stability issues when enabled
                 # loss = criterion(model(images), labels)
                 loss1 = criterion(model(images)[0], labels[:1][:].squeeze(0))
-                selected_labels_cols = []
-                selected_images = []
-                for j in range(labels.shape[1]):
-                    col = labels[:,j]
-                    if col[0] != 0:
-                        selected_labels_cols.append(col)
-                        selected_images.append(images[j].unsqueeze(0))
-                if selected_labels_cols:
-                    selected_labels_cols = [tensor.unsqueeze(1) for tensor in selected_labels_cols] 
-                    selected_cols_tensor = torch.cat(selected_labels_cols, dim=1)  
-                    selected_images_tensor = torch.cat(selected_images, dim=0)  
-                else:
-                    selected_cols_tensor = torch.empty((labels.shape[0], 0), device=device)  
-                    selected_images_tensor = torch.empty((0, images.shape[1], images.shape[2], images.shape[3]), device=device) 
-                       
-                # loss2 = criterion(model(images)[1], labels[1:2][:].squeeze(0))
-                if selected_cols_tensor.numel() != 0:
-                    loss2 = criterion(model(selected_images_tensor)[1], selected_cols_tensor[1:2][:].squeeze(0))
-                else:
-                    loss2 = torch.tensor(0.0, device=device)
+                loss2 = compute_loss(images=images, labels=labels, model=model, criterion=criterion, device=device)
                 # loss2 = criterion(model(images)[1], labels[1:2][:].squeeze(0))
                 loss3 = criterion(model(images)[2], labels[1:2][:].squeeze(0))
                 loss = loss1 + loss2 + loss3
