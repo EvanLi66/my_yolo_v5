@@ -228,7 +228,30 @@ def train(opt, device):
             with amp.autocast(enabled=cuda):  # stability issues when enabled
                 # loss = criterion(model(images), labels)
                 loss1 = criterion(model(images)[0], labels[:1][:].squeeze(0))
-                loss2 = criterion(model(images)[1], labels[1:2][:].squeeze(0))
+                selected_labels_cols = []
+                selected_images = []
+                for j in range(labels.shape[1]):
+                    col = labels[:,j]
+                    if col[0] != 0:
+                        selected_labels_cols.append(col)
+                        selected_images.append(images[j].unsqueeze(0))
+                if selected_labels_cols:
+                    selected_labels_cols = [tensor.unsqueeze(1) for tensor in selected_labels_cols] 
+                    selected_cols_tensor = torch.cat(selected_labels_cols, dim=1)  
+                    selected_images_tensor = torch.cat(selected_images, dim=0)  
+                else:
+                    selected_cols_tensor = torch.empty((labels.shape[0], 0), device=device)  
+                    selected_images_tensor = torch.empty((0, images.shape[1], images.shape[2], images.shape[3]), device=device) 
+                a = torch.empty((0, images.shape[1], images.shape[2], images.shape[3]), device=device) 
+                if a.numel() == 0:
+                    b = 10
+                       
+                # loss2 = criterion(model(images)[1], labels[1:2][:].squeeze(0))
+                if selected_cols_tensor.numel() != 0:
+                    loss2 = criterion(model(selected_images_tensor)[1], selected_cols_tensor[1:2][:].squeeze(0))
+                else:
+                    loss2 = torch.tensor(0.0, device=device)
+                # loss2 = criterion(model(images)[1], labels[1:2][:].squeeze(0))
                 loss3 = criterion(model(images)[2], labels[1:2][:].squeeze(0))
                 loss = loss1 + loss2 + loss3
             # Backward
